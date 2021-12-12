@@ -1,24 +1,86 @@
 {
   "name": "moobarn",
-  "version": "1.0.0",
-  "private": true,
-  "description": "moobarn",
-  "author": "Andrew Zigler",
+  "version": "0.9.0",
+  "description": "MOO Bridge API for React and Node",
+  "private": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/azigler/moobarn.git"
+  },
   "keywords": [
-    "gatsby"
+    "MOO",
+    "React",
+    "Node",
+    "ES6",
+    "LambdaMOO",
+    "API"
   ],
+  "author": "Andrew Zigler <andrewzigler@gmail.com> (https://www.andrewzigler.com)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/azigler/moobarn/issues",
+    "email": "andrewzigler@gmail.com"
+  },
+  "homepage": "https://github.com/azigler/moobarn#readme",
   "scripts": {
-    "develop": "gatsby develop",
-    "start": "gatsby develop",
+    "dev": "gatsby develop",
     "build": "gatsby build",
     "serve": "gatsby serve",
-    "clean": "gatsby clean"
+    "clean": "gatsby clean",
+    "start": "node index.js",
+    "pm2-start": "pm2 start ecosystem.config.js"
   },
   "dependencies": {
+    "@hapi/cookie": "^11.0.2",
+    "@hapi/hapi": "^20.2.1",
+    "@hapi/inert": "^6.0.4",
+    "@hapi/joi": "^17.1.1",
+    "find-process": "^1.4.7",
     "gatsby": "^4.3.0",
     "gatsby-plugin-sass": "^5.3.0",
-    "react": "^17.0.1",
-    "react-dom": "^17.0.1",
+    "gatsby-plugin-transition-link": "^1.20.5",
+    "pidusage": "^3.0.0",
+    "react": "^17.0.2",
+    "react-dom": "^17.0.2",
+    "react-helmet": "^6.1.0",
     "sass": "^1.44.0"
+  },
+  "devDependencies": {
+    "dotenv": "^10.0.0",
+    "eslint": "^8.4.1",
+    "eslint-config-standard": "^16.0.3",
+    "eslint-plugin-jsx-a11y": "^6.5.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^5.2.0",
+    "standard": "^16.0.4"
+  },
+  "eslintConfig": {
+    "root": true,
+    "parserOptions": {
+      "ecmaVersion": 12
+    },
+    "settings": {
+      "react": {
+        "version": "detect"
+      }
+    },
+    "env": {
+      "node": true,
+      "browser": true
+    },
+    "extends": [
+      "eslint:recommended",
+      "plugin:react/recommended",
+      "standard",
+      "plugin:jsx-a11y/recommended"
+    ],
+    "rules": {
+      "react/prop-types": "off",
+      "camelcase": "off",
+      "jsx-a11y/no-onchange": "off"
+    },
+    "plugins": [
+      "jsx-a11y"
+    ]
   }
 }

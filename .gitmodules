@@ -1,0 +1,6 @@
+[submodule "toaststunt"]
+	path = toaststunt
+	url = https://github.com/lisdude/toaststunt
+[submodule "dbs/toastcore"]
+	path = dbs/toastcore
+	url = https://github.com/lisdude/toastcore

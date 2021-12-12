@@ -1,3 +1,13 @@
+.DS_Store
+.TODO
+
 node_modules/
+.env
+
+barn/*
+!barn/.gitkeep
+controllers/backup/state.json
+
 .cache/
-public
+public/*
+!public/.gitkeep
