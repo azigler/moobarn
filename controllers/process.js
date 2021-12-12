@@ -141,13 +141,13 @@ class ProcessController {
         stdio = ['inherit', 'inherit', 'inherit']
       }
 
-      const child = spawn(`${mooPath} ${preMooArgs} ${barnPath}/${moo}/${startDb} ${barnPath}/${moo}/${moo}.new.db ${postMooArgs} ${port}`, [], { shell: true, detached: true, stdio })
+      const child = spawn(`${mooPath} ${preMooArgs}${barnPath}/${moo}/${startDb} ${barnPath}/${moo}/${moo}.new.db ${postMooArgs}${port}`, [], { shell: true, detached: true, stdio })
 
       let pid = child.pid
 
       const arr = await this.findMooProcesses()
       arr.forEach(ele => {
-        if (ele.name === `${moo}.new.db`) {
+        if (ele.cmd === `${mooPath} ${preMooArgs}${barnPath}/${moo}/${startDb} ${barnPath}/${moo}/${moo}.new.db ${postMooArgs}${port}`) {
           pid = ele.pid
         }
       })

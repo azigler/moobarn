@@ -64,6 +64,7 @@ class Moobarn extends require('events') {
     this.backupFailedError = (moo) => `ERROR: back up failed for ${moo} moo`
     this.mooDisabledError = (moo) => `ERROR: ${moo} moo is disabled`
     this.notFoundForError = (notFound, forThing) => `[!] No ${notFound} found for ${forThing}... Setting default...`
+    this.mooOnlineStatusMsg = (info) => `${info.pid ? `🟢 ONLINE @ ${info.mooArgs.ipv4 !== null ? info.mooArgs.ipv4 : ''} port ${info.mooArgs.port || this.controllers.get('process').defaultMooPort}` : '🔴 OFFLINE'}`
 
     this.controllers = new Map()
     this.barn = new Map()
@@ -108,7 +109,7 @@ class Moobarn extends require('events') {
       for (goal; goal > 0; goal--) {
         padding = padding + ' '
       }
-      console.log(`${padding}${key} :: ${value.pid ? `🟢 ONLINE @ ${value.mooArgs.ipv4 !== null ? value.mooArgs.ipv4 : 'localhost'}:${value.mooArgs.port || this.controllers.get('process').defaultMooPort}` : '🔴 OFFLINE'}`)
+      console.log(`${padding}${key} :: ${this.mooOnlineStatusMsg(value)}`)
     })
     console.log()
   }
@@ -121,7 +122,7 @@ class Moobarn extends require('events') {
         usage = await pidusage(result.pid)
       }
 
-      console.log(`\n${moo} ${result.pid ? `🟢 ONLINE @ ${result.mooArgs.ipv4 !== null ? result.mooArgs.ipv4 : 'localhost'}:${result.mooArgs.port || this.controllers.get('process').defaultMooPort}` : '🔴 OFFLINE'}`)
+      console.log(`\n${moo} ${this.mooOnlineStatusMsg(result)}`)
       console.log(`   Disabled: ${result.disabled ? 'true' : 'false'}`)
       console.log(`   Isolated: ${result.insolated ? 'true' : 'false'}`)
       console.log(`        TLS: ${result.mooArgs.tls ? 'true' : 'false'}`)
@@ -165,7 +166,7 @@ class Moobarn extends require('events') {
       console.log(this.mooAlreadyExistsError(moo))
     }
 
-    console.log(`Successfully initialized ${moo}. You can now start it with 'node ./ start ${moo}'`)
+    console.log(`Successfully initialized ${moo} from ${fromDb}. You can now start it with 'node ./ start ${moo}'`)
   }
 
   loadMooInfo (moo) {
