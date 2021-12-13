@@ -109,13 +109,15 @@ class BridgeController {
   }
 
   async spawnBridge (moo, info = {}) {
-    const child = spawn(`node node_modules/@digibear/socket-bridge/socket-bridge.js --connect --websocket ${info.bridgeWebSocketPort} --telnet ${info.bridgeTelnetPort ? info.bridgeTelnetPort : info.mooArgs.port} -v`, [], { shell: true, detached: true, stdio: 'ignore' })
+    const cmd = `node node_modules/@digibear/socket-bridge/socket-bridge.js --connect --websocket ${info.bridgeWebSocketPort} --telnet ${info.bridgeTelnetPort ? info.bridgeTelnetPort : info.mooArgs.port}`
+
+    const child = spawn(cmd, [], { shell: true, detached: true, stdio: 'ignore' })
 
     let bridgePid = child.pid
 
     const arr = await this.findBridgeProcesses()
     arr.forEach(ele => {
-      if (ele.cmd === `node node_modules/@digibear/socket-bridge/socket-bridge.js --connect --websocket ${info.bridgeWebSocketPort} --telnet ${info.bridgeTelnetPort ? info.bridgeTelnetPort : info.mooArgs.port} -v`) {
+      if (ele.cmd === cmd) {
         bridgePid = ele.pid
       }
     })

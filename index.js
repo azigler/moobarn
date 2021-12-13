@@ -152,7 +152,6 @@ if (arg_1 === 'init') {
 // handle test
 if (arg_1 === 'test') {
   console.log('\n(this space intentionally left blank)\n')
-  server.controllers.get('bridge').stopBridge('wink')
   setTimeout(() => {
     process.exit()
   }, launcher_timeout)
