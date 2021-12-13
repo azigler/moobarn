@@ -23,7 +23,7 @@ class ProcessController {
 
   async isMooStarted (moo) {
     const info = this.server.barn.get(moo)
-    if (info.pid !== null) {
+    if (info.pid) {
       try {
         await pidusage(info.pid)
         return true
@@ -40,13 +40,15 @@ class ProcessController {
     const info = this.server.barn.get(moo)
     if (info) {
       if (!(await this.isMooStarted(moo)) && !info.disabled) {
-        console.log(`[>] Starting ${moo} moo @ ${info.mooArgs.ipv4 !== null ? info.mooArgs.ipv4 : 'localhost'}:${info.mooArgs.port || this.controllers.get('process').defaultMooPort}...`)
+        const msgInfo = info
+        msgInfo.pid = 1
+        console.log(`[>] Starting ${moo} moo ${this.server.mooOnlineStatusMsg(msgInfo)}...`)
         if (port) {
           info.mooArgs.port = port
         }
-        this.spawn(moo, info)
+        this.spawnMoo(moo, info)
       } else if (!info.disabled) {
-        console.log(this.server.mooAlreadyStartedError(moo))
+        console.log(this.server.thingAlreadyStartedError('moo', moo))
       } else {
         console.log(this.server.mooDisabledError(moo))
       }
@@ -70,7 +72,7 @@ class ProcessController {
         console.log(`[X] Stopping ${moo} moo...`)
         this.killMoo(moo)
       } else {
-        console.log(this.server.mooAlreadyStoppedError(moo))
+        console.log(this.server.thingAlreadyStoppedError('moo', moo))
       }
     } else {
       console.log(this.server.notFoundError(moo, 'moo'))
@@ -101,14 +103,14 @@ class ProcessController {
         try {
           await pidusage(value.pid)
         } catch (e) {
-          console.log(`[^] Resurrecting ${key} moo @ ${value.mooArgs.ipv4 !== null ? value.mooArgs.ipv4 : 'localhost'}:${value.mooArgs.port || this.controllers.get('process').defaultMooPort}...`)
-          this.spawn(key, value)
+          console.log(`[^] Resurrecting ${key} moo ${this.server.mooOnlineStatusMsg(value)}...`)
+          this.spawnMoo(key, value)
         }
       }
     })
   }
 
-  spawn (moo, info = {}) {
+  spawnMoo (moo, info = {}) {
     const [preMooArgs, postMooArgs, port] = this.prepareMooArgs(info)
     let startDb
 
@@ -136,7 +138,7 @@ class ProcessController {
       }
 
       let stdio = [logStream, logStream, logStream]
-      if (info.mooArgs.scriptFile !== null) {
+      if (info.mooArgs.scriptFile) {
         console.log(`NOTE: Unable to write to ${moo}.new.log due to -f argument`)
         stdio = ['inherit', 'inherit', 'inherit']
       }
@@ -243,31 +245,31 @@ class ProcessController {
         emergencyMode = '-T '
       }
 
-      if (info.mooArgs.scriptFile !== null) {
+      if (info.mooArgs.scriptFile) {
         scriptFile = `-f ${info.mooArgs.scriptFile} `
       }
 
-      if (info.mooArgs.scriptLine !== null) {
+      if (info.mooArgs.scriptLine) {
         scriptLine = `-c ${info.mooArgs.scriptLine} `
       }
 
-      if (info.mooArgs.logFile !== null) {
+      if (info.mooArgs.logFile) {
         scriptLine = `-l ${info.mooArgs.scriptLine} `
       }
 
-      if (info.mooArgs.waifType !== null) {
+      if (info.mooArgs.waifType) {
         waifType = `-w ${info.mooArgs.scriptLine} `
       }
 
-      if (info.mooArgs.ipv4 !== null) {
+      if (info.mooArgs.ipv4) {
         ipv4 = `-4 ${info.mooArgs.ipv4} `
       }
 
-      if (info.mooArgs.ipv6 !== null) {
+      if (info.mooArgs.ipv6) {
         ipv6 = `-6 ${info.mooArgs.ipv6} `
       }
 
-      if (info.mooArgs.port !== 7777) {
+      if (info.mooArgs.port !== this.defaultMooPort) {
         port = info.mooArgs.port
       }
 

@@ -8,7 +8,7 @@ const help_cmd = ['help', '-h', '--help']
 const version_cmd = ['version', '-v', '--version']
 const info_cmd = ['info', 'status', 'stat']
 const debug_cmd = ['test', 'bootloop']
-const cmd_list = ['init', 'start', 'stop', 'backup', 'list', 'scan', ...version_cmd, ...help_cmd, ...info_cmd, ...debug_cmd]
+const cmd_list = ['init', 'start', 'stop', 'backup', 'list', 'scan', 'bridge', ...version_cmd, ...help_cmd, ...info_cmd, ...debug_cmd]
 
 const help_msg = `
 MOOBARN :: MOO Bridge API for React and Node
@@ -19,34 +19,35 @@ MOOBARN :: MOO Bridge API for React and Node
     start [moo-name] [port]           start [moo-name] on port [port], or all moos if nothing specified
     stop [moo-name]                   stop [moo-name], or all moos if nothing specified
     backup [moo-name]                 back up [moo-name], or all moos if nothing specified
-    list                              print a list of all moos in ./barn and their current status
+    list                              print a list of all moos in ./barn
     scan                              scan this system for any moo-related processes
+    bridge [scan]                     print a list of all bridges, or scan for related processes
     info/status [moo-name]            print detailed info about [moo-name], or all moos if nothing specified
 
 If no arguments are provided, moobarn will simply initialize and start running in the current shell.
 `
 
-const command = process.argv[2]
-const moo = process.argv[3]
-const prep_or_port = process.argv[4]
-const source_db = process.argv[5]
+const arg_1 = process.argv[2]
+const arg_2 = process.argv[3]
+const arg_3 = process.argv[4]
+const arg_4 = process.argv[5]
 
 const invalid_cmd_error = 'ERROR: Invalid command format'
 
-if (!cmd_list.includes(command) && command) {
+if (!cmd_list.includes(arg_1) && arg_1) {
   console.log(invalid_cmd_error)
   console.log(help_msg)
   process.exit()
 }
 
 // handle help
-if (help_cmd.includes(command) || (!cmd_list.includes(command) && command)) {
+if (help_cmd.includes(arg_1) || (!cmd_list.includes(arg_1) && arg_1)) {
   console.log(help_msg)
   process.exit()
 }
 
 // handle version
-if (version_cmd.includes(command)) {
+if (version_cmd.includes(arg_1)) {
   console.log(pkg.version)
   process.exit()
 }
@@ -55,33 +56,47 @@ if (version_cmd.includes(command)) {
 const server = new Moobarn()
 
 // start the server
-if (!command || command === 'bootloop') {
+if (!arg_1 || arg_1 === 'bootloop') {
   server.start('verbose')
   server.controllers.get('process').resurrect()
+  server.controllers.get('bridge').resurrect()
 } else {
   server.start()
 }
 
 // handle scan
-if (command === 'scan') {
+if (arg_1 === 'scan') {
   server.controllers.get('process').findMooProcesses('pretty')
   setTimeout(() => {
     process.exit()
   }, launcher_timeout)
 }
 
+// handle bridge
+if (arg_1 === 'bridge') {
+  if (arg_2 === 'scan') {
+    server.controllers.get('bridge').findBridgeProcesses('pretty')
+    setTimeout(() => {
+      process.exit()
+    }, launcher_timeout)
+  } else {
+    server.controllers.get('bridge').listAllBridges()
+    process.exit()
+  }
+}
+
 // handle list
-if (command === 'list') {
+if (arg_1 === 'list') {
   server.listAllMoos()
   process.exit()
 }
 
 // handle info
-if (info_cmd.includes(command)) {
-  if (!moo) {
+if (info_cmd.includes(arg_1)) {
+  if (!arg_2) {
     server.printAllInfo()
   } else {
-    server.printInfo(moo)
+    server.printInfo(arg_2)
   }
   setTimeout(() => {
     process.exit()
@@ -89,11 +104,11 @@ if (info_cmd.includes(command)) {
 }
 
 // handle start
-if (command === 'start') {
-  if (!moo) {
+if (arg_1 === 'start') {
+  if (!arg_2) {
     server.controllers.get('process').startAll()
   } else {
-    server.controllers.get('process').startMoo(moo, prep_or_port)
+    server.controllers.get('process').startMoo(arg_2, arg_3)
   }
   setTimeout(() => {
     process.exit()
@@ -101,11 +116,11 @@ if (command === 'start') {
 }
 
 // handle stop
-if (command === 'stop') {
-  if (!moo) {
+if (arg_1 === 'stop') {
+  if (!arg_2) {
     server.controllers.get('process').stopAll()
   } else {
-    server.controllers.get('process').stopMoo(moo)
+    server.controllers.get('process').stopMoo(arg_2)
   }
   setTimeout(() => {
     process.exit()
@@ -113,37 +128,38 @@ if (command === 'stop') {
 }
 
 // handle backup
-if (command === 'backup') {
-  if (!moo) {
+if (arg_1 === 'backup') {
+  if (!arg_2) {
     server.controllers.get('backup').backupAll(true)
   } else {
-    server.controllers.get('backup').backupMoo(moo)
+    server.controllers.get('backup').backupMoo(arg_2)
   }
   process.exit()
 }
 
 // handle init
-if (command === 'init') {
-  if (!moo || !prep_or_port || prep_or_port !== 'from' || !source_db) {
+if (arg_1 === 'init') {
+  if (!arg_2 || !arg_3 || arg_3 !== 'from' || !arg_4) {
     console.log(invalid_cmd_error)
     console.log(help_msg)
     process.exit()
   }
 
-  server.initMoo(moo, source_db)
+  server.initMoo(arg_2, arg_4)
   process.exit()
 }
 
 // handle test
-if (command === 'test') {
+if (arg_1 === 'test') {
   console.log('\n(this space intentionally left blank)\n')
+  server.controllers.get('bridge').stopBridge('wink')
   setTimeout(() => {
     process.exit()
   }, launcher_timeout)
 }
 
 // handle bootloop
-if (command === 'bootloop') {
+if (arg_1 === 'bootloop') {
   let looping = false
 
   const debugStop = () => {

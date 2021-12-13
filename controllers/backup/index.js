@@ -81,7 +81,7 @@ class BackupController {
       } catch {
         console.log(this.server.backupFailedError(moo))
       }
-      if (info.backupFinalScript !== null) {
+      if (info.backupFinalScript) {
         spawn(`sh ${info.backupFinalScript}`, [], { shell: true, detached: false, stdio: 'inherit' })
       }
     } else if (!info) {

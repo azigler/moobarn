@@ -59,12 +59,14 @@ class Moobarn extends require('events') {
 
     this.mooAlreadyExistsError = (moo) => `ERROR: ${moo} moo already exists`
     this.notFoundError = (name, type) => `ERROR: ${name} ${type} not found`
-    this.mooAlreadyStartedError = (moo) => `ERROR: ${moo} moo has already started`
-    this.mooAlreadyStoppedError = (moo) => `ERROR: ${moo} moo has already stopped`
+    this.thingAlreadyStartedError = (thing, moo) => `ERROR: ${moo} ${thing} has already started`
+    this.thingAlreadyStoppedError = (thing, moo) => `ERROR: ${moo} ${thing} has already stopped`
     this.backupFailedError = (moo) => `ERROR: back up failed for ${moo} moo`
     this.mooDisabledError = (moo) => `ERROR: ${moo} moo is disabled`
     this.notFoundForError = (notFound, forThing) => `[!] No ${notFound} found for ${forThing}... Setting default...`
-    this.mooOnlineStatusMsg = (info) => `${info.pid ? `🟢 ONLINE @ ${info.mooArgs.ipv4 !== null ? info.mooArgs.ipv4 : ''} port ${info.mooArgs.port || this.controllers.get('process').defaultMooPort}` : '🔴 OFFLINE'}`
+
+    this.mooOnlineStatusMsg = (info) => `${info.pid ? `🟢 ONLINE @ ${info.mooArgs.ipv4 ? info.mooArgs.ipv4 + ' ' : ''}port ${info.mooArgs.port || this.controllers.get('process').defaultMooPort}` : '🔴 OFFLINE'}`
+    this.bridgeOnlineStatusMsg = (info) => `${info.bridgePid ? `🟢 ONLINE @ WS:${info.bridgeWebSocketPort} -> TL:${info.bridgeTelnetPort ? info.bridgeTelnetPort : info.mooArgs.port}` : '🔴 OFFLINE'}`
 
     this.controllers = new Map()
     this.barn = new Map()
@@ -118,7 +120,7 @@ class Moobarn extends require('events') {
     const result = this.barn.get(moo)
     if (result) {
       let usage = null
-      if (result.pid !== null) {
+      if (result.pid) {
         usage = await pidusage(result.pid)
       }
 
@@ -131,6 +133,10 @@ class Moobarn extends require('events') {
         console.log(`     Uptime: ${this.controllers.get('process').determineUptime(usage)}`)
         console.log(`     Memory: ${this.controllers.get('process').determineMemory(usage)}`)
         console.log(`        CPU: ${this.controllers.get('process').determineProcessor(usage)}`)
+      }
+      if (result.bridgeWebSocketPort) {
+        console.log(`     Bridge: ${this.bridgeOnlineStatusMsg(result)}`)
+        console.log(` Bridge PID: ${!result.bridgePid ? '(none, offline)' : result.bridgePid}`)
       }
       console.log(` Last start: ${!result.lastStart ? '(never)' : new Date(result.lastStart)}`)
       console.log(`Last backup: ${!result.lastBackup ? '(never)' : new Date(result.lastBackup)}\n`)
@@ -183,6 +189,9 @@ class Moobarn extends require('events') {
       const initInfo = {
         backupFinalScript: null,
         backupIntervalHours: null,
+        bridgePid: null,
+        bridgeTelnetPort: null,
+        bridgeWebSocketPort: null,
         disabled: false,
         isolated: false,
         lastStart: 0,
