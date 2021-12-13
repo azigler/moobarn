@@ -15,7 +15,7 @@ class BridgeController {
 
   async start () {
     if (this.server.FLAG === 'verbose') console.log('[#] Starting telnet <-> websocket bridge...')
-    this.startAll(true)
+    this.startAll()
   }
 
   stop () {
@@ -37,11 +37,13 @@ class BridgeController {
     }
   }
 
-  async startBridge (moo, quiet) {
+  async startBridge (moo) {
     const info = this.server.barn.get(moo)
     if (info) {
       if (!(await this.isBridgeStarted(moo)) && !info.disabled) {
-        if (!quiet) { console.log(`[>] Starting ${moo} bridge... ${this.server.bridgeOnlineStatusMsg(info)}`) }
+        const msgInfo = info
+        msgInfo.bridgePid = 1
+        if (this.server.FLAG === 'verbose') { console.log(`[>] Starting ${moo} bridge... ${this.server.bridgeOnlineStatusMsg(msgInfo)}`) }
         this.spawnBridge(moo, info)
       } else if (!info.disabled) {
         console.log(this.server.thingAlreadyStartedError('bridge', moo))
@@ -53,11 +55,11 @@ class BridgeController {
     }
   }
 
-  startAll (quiet = false) {
+  startAll () {
     if (this.server.FLAG === 'verbose') console.log('[%] Starting all bridges...')
     this.server.barn.forEach((value, key) => {
       if ((!value || !value.bridgePid) && !value.disabled && value.bridgeWebSocketPort) {
-        this.startBridge(key, quiet)
+        this.startBridge(key)
       }
     })
   }
