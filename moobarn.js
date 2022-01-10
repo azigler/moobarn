@@ -4,16 +4,14 @@ const pidusage = require('pidusage')
 
 class Moobarn extends require('events') {
   constructor ({
-    loopIntervalHours = process.env.LOOP_INTERVAL_HOURS,
+    loopIntervalHours = process.env.LOOP_INTERVAL_HOURS || 1,
     defaultMooPort = process.env.DEFAULT_MOO_PORT || 7777,
-    defaultBackupFinalScript = process.env.DEFAULT_BACKUP_FINAL_SCRIPT || '',
     defaultBackupIntervalHours = process.env.DEFAULT_BACKUP_INTERVAL_HOURS || 24,
-    bridgeTelnetPort = process.env.BRIDGE_TELNET_PORT || 7988,
-    bridgeWebsocketPort = process.env.BRIDGE_WEBSOCKET_PORT || 7989,
+    defaultBackupFinalScript = process.env.DEFAULT_BACKUP_FINAL_SCRIPT || '',
+    webHostname = (process.env.WEB_HOSTNAME && process.env.WEB_HOSTNAME !== '') ? process.env.WEB_HOSTNAME : 'localhost',
+    webTlsCert = (process.env.WEB_TLS_CERT && process.env.WEB_TLS_CERT !== '') ? process.env.WEB_TLS_CERT : false,
+    webTlsKey = (process.env.WEB_TLS_KEY && process.env.WEB_TLS_KEY !== '') ? process.env.WEB_TLS_KEY : false,
     webPort = process.env.WEB_PORT || 7987,
-    webHost = process.env.WEB_HOST || 'localhost',
-    webTlsCert = (process.env.WEB_TLS_CERT !== '') ? process.env.WEB_TLS_CERT : false,
-    webTlsKey = (process.env.WEB_TLS_KEY !== '') ? process.env.WEB_TLS_KEY : false,
     webCookieUsername = process.env.WEB_COOKIE_USERNAME || 'moobarn',
     webCookiePassword = process.env.WEB_COOKIE_PASSWORD || 'moobarn-hapi-authentication-cookie',
     webCookieTtlDays = process.env.WEB_COOKIE_TTL_DAYS || 1,
@@ -21,6 +19,7 @@ class Moobarn extends require('events') {
     webLoginPassword = process.env.WEB_LOGIN_PASSWORD || 'moobarn'
   } = {}) {
     super()
+    this.defaultMooPort = defaultMooPort
 
     this.on('start', async () => {
       this.startTime = new Date()
@@ -32,15 +31,12 @@ class Moobarn extends require('events') {
         controller.init({
           server: this,
           loopIntervalHours,
-          defaultMooPort,
-          defaultBackupFinalScript,
           defaultBackupIntervalHours,
-          bridgeTelnetPort,
-          bridgeWebsocketPort,
-          webPort,
-          webHost,
+          defaultBackupFinalScript,
+          webHostname,
           webTlsCert,
           webTlsKey,
+          webPort,
           webCookieUsername,
           webCookiePassword,
           webCookieTtlDays,
@@ -63,10 +59,42 @@ class Moobarn extends require('events') {
     this.thingAlreadyStoppedError = (thing, moo) => `ERROR: ${moo} ${thing} has already stopped`
     this.backupFailedError = (moo) => `ERROR: back up failed for ${moo} moo`
     this.mooDisabledError = (moo) => `ERROR: ${moo} moo is disabled`
-    this.notFoundForError = (notFound, forThing) => `[!] No ${notFound} found for ${forThing}... Setting default...`
+    this.notFoundForError = (notFound, forThing) => `[!] No ${notFound} found for ${forThing}! Setting default...`
+    this.invalidNameError = (name) => `ERROR: ${name} is an invalid name`
 
-    this.mooOnlineStatusMsg = (info) => `${info.pid ? `🟢 ONLINE @ ${info.mooArgs.ipv4 ? info.mooArgs.ipv4 + ' ' : ''}port ${info.mooArgs.port || this.controllers.get('process').defaultMooPort}` : '🔴 OFFLINE'}`
-    this.bridgeOnlineStatusMsg = (info) => `${info.bridgePid ? `🟢 ONLINE @ WS:${info.bridgeWebSocketPort} -> TL:${info.bridgeTelnetPort ? info.bridgeTelnetPort : info.mooArgs.port}` : '🔴 OFFLINE'}`
+    this.mooOnlineStatusMsg = (info, starting = false) => {
+      const hostname = info.mooArgs.ipv4 ? info.mooArgs.ipv4 + ' ' : ''
+      const port = info.mooArgs.ports ? info.mooArgs.ports[0] : this.defaultMooPort
+      const tlsPort = info.mooArgs.tlsPorts ? info.mooArgs.tlsPorts[0] : false
+
+      if (tlsPort) {
+        return `${starting || info.pid ? `🟢 ONLINE @ ${hostname}telnet port ${port} & TLS port ${tlsPort}` : '🔴 OFFLINE'}`
+      } else {
+        return `${starting || info.pid ? `🟢 ONLINE @ ${hostname}port ${port}` : '🔴 OFFLINE'}`
+      }
+    }
+
+    this.bridgeOnlineStatusMsg = (info) => {
+      // WSS -> TLS
+      if (info.bridge.webSocketTlsCert && info.bridge.telnetTlsHostname) {
+        return `${info.bridge.pid ? `🟢 ONLINE @ wss://${info.bridge.webSocketHostname}:${info.bridge.webSocketPort} -> ${info.bridge.telnetTlsHostname}:${info.bridge.telnetPort}` : '🔴 OFFLINE'}`
+      }
+
+      // WSS -> TELNET
+      if (info.bridge.webSocketTlsCert && !info.bridge.telnetTlsHostname) {
+        return `${info.bridge.pid ? `🟢 ONLINE @ wss://${info.bridge.webSocketHostname}:${info.bridge.webSocketPort} -> telnet ${info.bridge.telnetPort}` : '🔴 OFFLINE'}`
+      }
+
+      // WS -> TLS
+      if (!info.bridge.webSocketTlsCert && info.bridge.telnetTlsHostname) {
+        return `${info.bridge.pid ? `🟢 ONLINE @ WS ${info.bridge.webSocketPort} -> ${info.bridge.telnetTlsHostname}:${info.bridge.telnetPort}` : '🔴 OFFLINE'}`
+      }
+
+      // WS -> TELNET
+      if (!info.bridge.webSocketTlsCert && !info.bridge.telnetTlsHostname) {
+        return `${info.bridge.pid ? `🟢 ONLINE @ WS ${info.bridge.webSocketPort} -> telnet ${info.bridge.telnetPort}` : '🔴 OFFLINE'}`
+      }
+    }
 
     this.controllers = new Map()
     this.barn = new Map()
@@ -96,6 +124,39 @@ class Moobarn extends require('events') {
     return fs.existsSync(path.join(__dirname, 'dbs', db, `${db}.db`))
   }
 
+  getDbs () {
+    return fs.readdirSync(
+      path.join(__dirname, 'dbs'), e => {
+        throw e
+      }
+    ).filter(db => {
+      return db !== '.DS_Store'
+    })
+  }
+
+  getMoocode () {
+    return fs.readdirSync(
+      path.join(__dirname, 'moocode'), e => {
+        throw e
+      }
+    ).filter(item => {
+      if (item.endsWith('.moo')) {
+        return true
+      } else {
+        return false
+      }
+    })
+  }
+
+  invalidName (name) {
+    switch (name) {
+      case 'all': {
+        return true
+      }
+    }
+    return false
+  }
+
   listAllMoos () {
     let longest = 0
     this.barn.forEach((value, key) => {
@@ -121,43 +182,60 @@ class Moobarn extends require('events') {
     if (result) {
       let usage = null
       if (result.pid) {
-        usage = await pidusage(result.pid)
+        try {
+          usage = await pidusage(result.pid)
+        } catch {
+          this.setMooInfo(moo, { pid: null })
+        }
       }
 
       console.log(`\n${moo} ${this.mooOnlineStatusMsg(result)}`)
       console.log(`   Disabled: ${result.disabled ? 'true' : 'false'}`)
-      console.log(`   Isolated: ${result.insolated ? 'true' : 'false'}`)
-      console.log(`        TLS: ${result.mooArgs.tls ? 'true' : 'false'}`)
+      console.log(`      Ports: ${result.mooArgs.ports ? result.mooArgs.ports : '(default)'}`)
+      console.log(`  TLS Ports: ${result.mooArgs.tlsPorts ? result.mooArgs.tlsPorts : '(none)'}`)
       console.log(`        PID: ${!result.pid ? '(none)' : result.pid}`)
       if (usage) {
         console.log(`     Uptime: ${this.controllers.get('process').determineUptime(usage)}`)
         console.log(`     Memory: ${this.controllers.get('process').determineMemory(usage)}`)
         console.log(`        CPU: ${this.controllers.get('process').determineProcessor(usage)}`)
       }
-      if (result.bridgeWebSocketPort) {
+      if (result.bridge.webSocketPort && result.bridge.telnetPort) {
         console.log(`     Bridge: ${this.bridgeOnlineStatusMsg(result)}`)
-        console.log(` Bridge PID: ${!result.bridgePid ? '(none, offline)' : result.bridgePid}`)
+        console.log(` Bridge PID: ${!result.bridge.pid ? '(none)' : result.bridge.pid}`)
       }
       console.log(` Last start: ${!result.lastStart ? '(never)' : new Date(result.lastStart)}`)
-      console.log(`Last backup: ${!result.lastBackup ? '(never)' : new Date(result.lastBackup)}\n`)
+      console.log(`Last backup: ${!result.backup.last ? '(never)' : new Date(result.backup.last)}`)
     } else {
       return console.log(this.notFoundError(moo, 'moo'))
     }
   }
 
-  printAllInfo () {
-    this.barn.forEach((value, key) => {
-      this.printInfo(key, true)
-    })
+  async printAllInfo () {
+    for (const [key] of this.barn.entries()) {
+      await this.printInfo(key, true)
+    }
+    console.log()
   }
 
   initMoo (moo, fromDb) {
+    let result
+
+    if (!moo || this.invalidName(moo)) {
+      result = this.invalidNameError(moo)
+      console.log(result)
+      return result
+    }
+
     if (this.mooExists(moo)) {
-      return console.log(this.mooAlreadyExistsError(moo))
+      result = this.mooAlreadyExistsError(moo)
+      console.log(result)
+      return result
     }
 
     if (!this.dbExists(fromDb)) {
-      return console.log(this.notFoundError(fromDb, 'db'))
+      result = this.notFoundError(fromDb, 'db')
+      console.log(result)
+      return result
     }
 
     fs.mkdirSync(path.join(__dirname, 'barn', moo, 'backup'), { recursive: true }, (e) => {
@@ -169,10 +247,14 @@ class Moobarn extends require('events') {
     try {
       fs.copyFileSync(path.join(__dirname, 'dbs', fromDb, `${fromDb}.db`), path.join(__dirname, 'barn', moo, `${moo}.source.db`), fs.constants.COPYFILE_EXCL)
     } catch {
-      console.log(this.mooAlreadyExistsError(moo))
+      result = this.mooAlreadyExistsError(moo)
+      console.log(result)
+      return result
     }
 
-    console.log(`Successfully initialized ${moo} from ${fromDb}. You can now start it with 'node ./ start ${moo}'`)
+    result = `Successfully initialized ${moo} from ${fromDb}`
+    console.log(result)
+    return result
   }
 
   loadMooInfo (moo) {
@@ -187,27 +269,38 @@ class Moobarn extends require('events') {
   setMooInfo (moo, info, replace = false) {
     if (!info) {
       const initInfo = {
-        backupFinalScript: null,
-        backupIntervalHours: null,
-        bridgePid: null,
-        bridgeTelnetPort: null,
-        bridgeWebSocketPort: null,
+        backup: {
+          finalScript: null,
+          intervalHours: null,
+          last: 0
+        },
+        bridge: {
+          pid: null,
+          telnetPort: null,
+          telnetTlsHostname: null,
+          webSocketPort: null,
+          webSocketHostname: null,
+          webSocketTlsCert: null,
+          webSocketTlsKey: null
+        },
         disabled: false,
-        isolated: false,
         lastStart: 0,
-        lastBackup: 0,
         mooArgs: {
           emergencyMode: null,
-          scriptFile: null,
-          scriptLine: null,
+          startScript: null,
+          startLine: null,
           logFile: null,
           clearLastMove: null,
           waifType: null,
           outbound: null,
-          tls: null,
           ipv4: null,
           ipv6: null,
-          port: 7777
+          tlsCert: null,
+          tlsKey: null,
+          fileDir: null,
+          execDir: null,
+          ports: null,
+          tlsPorts: null
         },
         name: moo,
         pid: null
@@ -226,6 +319,7 @@ class Moobarn extends require('events') {
       data = this.loadMooInfo(moo)
     }
 
+    this.barn.set(moo, { ...data, ...info })
     fs.writeFileSync(path.join(__dirname, 'barn', moo, 'info.json'), JSON.stringify({ ...data, ...info }, null, '\t'), e => {
       throw e
     })
@@ -262,7 +356,7 @@ class Moobarn extends require('events') {
             if (type === 'api') {
               if (this.FLAG === 'verbose') console.log(`[+] Loaded ${filename} <${type}> from ${path.join(dir, type)}`)
               const sourcePath = path.join(dir, type, file)
-              this.controllers.get('web').api = [...this.controllers.get('web').api, require(sourcePath)]
+              this.controllers.get('web').api = [...this.controllers.get('web').api, require(sourcePath)(this)]
               continue
             }
 

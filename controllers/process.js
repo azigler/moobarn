@@ -1,20 +1,20 @@
 const fs = require('fs')
 const path = require('path')
-const { spawn } = require('child_process')
+const child_process = require('child_process')
 const findProcess = require('find-process')
 const pidusage = require('pidusage')
 
 class ProcessController {
   async init ({
-    server,
-    defaultMooPort
+    server
   }) {
     this.server = server
-    this.defaultMooPort = defaultMooPort
+    this.procMap = new Map()
   }
 
   start () {
     if (this.server.FLAG === 'verbose') console.log('[#] Starting moo process controller...')
+    this.updatePids()
   }
 
   stop () {
@@ -36,56 +36,74 @@ class ProcessController {
     }
   }
 
-  async startMoo (moo, port) {
+  async startMoo (moo) {
     const info = this.server.barn.get(moo)
+    let result
     if (info) {
       if (!(await this.isMooStarted(moo)) && !info.disabled) {
         const msgInfo = info
-        msgInfo.pid = 1
-        console.log(`[>] Starting ${moo} moo ${this.server.mooOnlineStatusMsg(msgInfo)}...`)
-        if (port) {
-          info.mooArgs.port = port
-        }
+        result = `[>] Starting ${moo} moo ${this.server.mooOnlineStatusMsg(msgInfo, true)}...`
         this.spawnMoo(moo, info)
+        console.log(result)
+        return result
       } else if (!info.disabled) {
-        console.log(this.server.thingAlreadyStartedError('moo', moo))
+        result = this.server.thingAlreadyStartedError('moo', moo)
+        console.log(result)
+        return result
       } else {
-        console.log(this.server.mooDisabledError(moo))
+        result = this.server.mooDisabledError(moo)
+        console.log(result)
+        return result
       }
     } else {
-      console.log(this.server.notFoundError(moo, 'moo'))
+      result = this.server.notFoundError(moo, 'moo')
+      console.log(result)
+      return result
     }
   }
 
-  startAll () {
-    console.log('[%] Starting all moos...')
-    this.server.barn.forEach((value, key) => {
-      if ((!value || !value.pid) && !value.disabled) {
+  async startAll () {
+    const result = '[%] Starting all moos...'
+    console.log(result)
+    for (const [key, value] of this.server.barn.entries()) {
+      if (!value.pid && !value.disabled) {
         this.startMoo(key)
       }
-    })
+    }
+    this.updatePids()
+    return result
   }
 
   async stopMoo (moo) {
-    if (this.server.barn.get(moo)) {
+    let result
+    const info = this.server.barn.get(moo)
+    if (info) {
       if (await this.isMooStarted(moo)) {
-        console.log(`[X] Stopping ${moo} moo...`)
+        result = `[X] Stopping ${moo} moo...`
+        console.log(result)
         this.killMoo(moo)
+        return result
       } else {
-        console.log(this.server.thingAlreadyStoppedError('moo', moo))
+        result = this.server.thingAlreadyStoppedError('moo', moo)
+        console.log(result)
+        return result
       }
     } else {
-      console.log(this.server.notFoundError(moo, 'moo'))
+      result = this.server.notFoundError(moo, 'moo')
+      console.log(result)
+      return result
     }
   }
 
-  stopAll () {
-    console.log('[%] Stopping all moos...')
-    this.server.barn.forEach((value, key) => {
+  async stopAll (restart = false) {
+    const result = '[%] Stopping all moos...'
+    console.log(result)
+    for (const [key, value] of this.server.barn.entries()) {
       if (value && value.pid) {
-        this.stopMoo(key)
+        await this.stopMoo(key)
       }
-    })
+    }
+    return result
   }
 
   killMoo (moo) {
@@ -111,7 +129,7 @@ class ProcessController {
   }
 
   spawnMoo (moo, info = {}) {
-    const [preMooArgs, postMooArgs, port] = this.prepareMooArgs(info)
+    const [mooArgs, portArgs] = this.prepareMooArgs(info)
     let startDb
 
     try {
@@ -123,19 +141,9 @@ class ProcessController {
     this.shuffleMooFiles(moo, 'log')
 
     const logStream = fs.createWriteStream(path.join(__dirname, '../', 'barn', moo, `${moo}.new.log`))
-    logStream.on('open', async () => {
+    logStream.on('open', () => {
       const barnPath = path.join(__dirname, '../', 'barn')
       const mooPath = path.join(__dirname, '../', 'toaststunt', 'build', 'moo')
-
-      if (info.isolated) {
-        process.chdir(path.join(__dirname, '../', 'barn', moo))
-        fs.mkdirSync(path.join(__dirname, '..', 'barn', moo, 'files'), { recursive: true }, (e) => {
-          throw e
-        })
-        fs.mkdirSync(path.join(__dirname, '..', 'barn', moo, 'executables'), { recursive: true }, (e) => {
-          throw e
-        })
-      }
 
       let stdio = [logStream, logStream, logStream]
       if (info.mooArgs.scriptFile) {
@@ -143,24 +151,34 @@ class ProcessController {
         stdio = ['inherit', 'inherit', 'inherit']
       }
 
-      const cmd = `${mooPath} ${preMooArgs}${barnPath}/${moo}/${startDb} ${barnPath}/${moo}/${moo}.new.db ${postMooArgs}${port}`
+      const cmd = `${mooPath} ${mooArgs ? mooArgs + ' ' : ''}${barnPath}/${moo}/${startDb} ${barnPath}/${moo}/${moo}.new.db ${portArgs}`
 
-      const child = spawn(cmd, [], { shell: true, detached: true, stdio })
+      const child = child_process.spawn(cmd, [], { shell: true, detached: true, stdio })
 
-      let pid = child.pid
+      const pid = child.pid
 
-      const arr = await this.findMooProcesses()
-      arr.forEach(ele => {
-        if (ele.cmd === cmd) {
-          pid = ele.pid
-        }
-      })
+      this.procMap.set(moo, cmd)
 
       this.server.setMooInfo(moo, {
         pid,
         lastStart: new Date().getTime()
       })
     })
+  }
+
+  updatePids () {
+    setTimeout(async () => {
+      const arr = await this.findMooProcesses()
+      for (const [key, value] of this.procMap.entries()) {
+        for (const ele of arr) {
+          if (ele.cmd === value) {
+            this.server.setMooInfo(key, {
+              pid: ele.pid
+            })
+          }
+        }
+      }
+    }, 400)
   }
 
   shuffleMooFiles (moo, filetype = 'db') {
@@ -210,77 +228,97 @@ class ProcessController {
   }
 
   prepareMooArgs (info) {
-    let emergencyMode = ''
-    let scriptFile = ''
-    let scriptLine = ''
-    const logFile = ''
-    const clearLastMove = ''
-    let waifType = ''
-    const outbound = ''
-    const tls = ''
-    let ipv4 = ''
-    let ipv6 = ''
-    let port = this.defaultMooPort
-
     if (info.mooArgs) {
+      let emergencyMode = ''
+      let startScript = ''
+      let startLine = ''
+      let logFile = ''
+      let clearLastMove = ''
+      let waifType = ''
+      let outbound = ''
+      let ipv4 = ''
+      let ipv6 = ''
+      let tlsCert = ''
+      let tlsKey = ''
+      let fileDir = ''
+      let execDir = ''
+      let ports = ''
+      let tlsPorts = ''
+
       if (info.mooArgs.emergencyMode === true) {
-        emergencyMode = '-e '
+        emergencyMode = '--emergency '
       }
 
       if (info.mooArgs.clearLastMove === true) {
-        emergencyMode = '-m '
+        clearLastMove = '--clear-move '
       }
 
       if (info.mooArgs.outbound === true) {
-        emergencyMode = '+O '
+        outbound = '--outbound '
       }
 
       if (info.mooArgs.outbound === false) {
-        emergencyMode = '-O '
+        outbound = '--no-outbound '
       }
 
-      if (info.mooArgs.tls === true) {
-        emergencyMode = '+T '
+      if (info.mooArgs.tlsCert !== null) {
+        tlsCert = `--tls-cert ${info.mooArgs.tlsCert} `
       }
 
-      if (info.mooArgs.tls === false) {
-        emergencyMode = '-T '
+      if (info.mooArgs.tlsKey !== null) {
+        tlsKey = `--tls-key ${info.mooArgs.tlsKey} `
       }
 
-      if (info.mooArgs.scriptFile) {
-        scriptFile = `-f ${info.mooArgs.scriptFile} `
+      if (info.mooArgs.startScript) {
+        startScript = `--start-script ${info.mooArgs.startScript} `
       }
 
-      if (info.mooArgs.scriptLine) {
-        scriptLine = `-c ${info.mooArgs.scriptLine} `
+      if (info.mooArgs.startLine) {
+        startLine = `--start-line ${info.mooArgs.startLine} `
       }
 
       if (info.mooArgs.logFile) {
-        scriptLine = `-l ${info.mooArgs.scriptLine} `
+        logFile = `--log ${info.mooArgs.logFile} `
       }
 
       if (info.mooArgs.waifType) {
-        waifType = `-w ${info.mooArgs.scriptLine} `
+        waifType = `--waif-type ${info.mooArgs.waifType} `
       }
 
       if (info.mooArgs.ipv4) {
-        ipv4 = `-4 ${info.mooArgs.ipv4} `
+        ipv4 = `--ipv4 ${info.mooArgs.ipv4} `
       }
 
       if (info.mooArgs.ipv6) {
-        ipv6 = `-6 ${info.mooArgs.ipv6} `
+        ipv6 = `--ipv6 ${info.mooArgs.ipv6} `
       }
 
-      if (info.mooArgs.port !== this.defaultMooPort) {
-        port = info.mooArgs.port
+      if (info.mooArgs.fileDir) {
+        fileDir = `--file-dir ${info.mooArgs.fileDir} `
       }
 
-      const preMooArgs = `${emergencyMode}${scriptFile}${scriptLine}${logFile}${clearLastMove}${waifType}`
-      const postMooArgs = `${outbound}${tls}${ipv4}${ipv6}`
+      if (info.mooArgs.execDir) {
+        execDir = `--exec-dir ${info.mooArgs.execDir} `
+      }
 
-      return [preMooArgs, postMooArgs, `-p ${port}`]
+      if (info.mooArgs.ports) {
+        ports = info.mooArgs.ports.map(port => {
+          return `-p ${port} `
+        }).join('')
+      }
+
+      if (info.mooArgs.tlsPorts) {
+        tlsPorts = info.mooArgs.tlsPorts.map(port => {
+          return `-t ${port} `
+        }).join('')
+      }
+
+      const mooArgs = `${emergencyMode}${startScript}${startLine}${logFile}${clearLastMove}${waifType}${outbound}${ipv4}${ipv6}${tlsCert}${tlsKey}${fileDir}${execDir}`
+      const portArgs = `${ports}${tlsPorts}`
+
+      return [mooArgs, portArgs]
     } else {
-      return ['', '', `-p ${port}`]
+      return ['', '']
     }
   }
 

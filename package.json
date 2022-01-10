@@ -1,6 +1,6 @@
 {
   "name": "moobarn",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "MOO Bridge API for React and Node",
   "private": false,
   "repository": {
@@ -25,10 +25,10 @@
   "scripts": {
     "dev": "gatsby develop",
     "build": "gatsby build",
-    "serve": "gatsby serve",
     "clean": "gatsby clean",
     "start": "node index.js",
-    "pm2-start": "pm2 start ecosystem.config.js"
+    "pm2-start": "pm2 start ecosystem.config.js",
+    "update-submodules": "git submodule update --remote"
   },
   "dependencies": {
     "@digibear/socket-bridge": "^1.0.6",
@@ -37,22 +37,24 @@
     "@hapi/inert": "^6.0.4",
     "@hapi/joi": "^17.1.1",
     "find-process": "^1.4.7",
-    "gatsby": "^4.3.0",
-    "gatsby-plugin-sass": "^5.3.0",
+    "gatsby": "^4.4.0",
+    "gatsby-plugin-sass": "^5.4.0",
     "gatsby-plugin-transition-link": "^1.20.5",
+    "gatsby-plugin-use-query-params": "^1.0.1",
     "pidusage": "^3.0.0",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
     "react-helmet": "^6.1.0",
-    "sass": "^1.44.0"
+    "sass": "^1.47.0",
+    "use-query-params": "^1.2.3"
   },
   "devDependencies": {
     "dotenv": "^10.0.0",
-    "eslint": "^8.4.1",
+    "eslint": "^8.6.0",
     "eslint-config-standard": "^16.0.3",
     "eslint-plugin-jsx-a11y": "^6.5.1",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^5.2.0",
+    "eslint-plugin-promise": "^6.0.0",
     "standard": "^16.0.4"
   },
   "eslintConfig": {

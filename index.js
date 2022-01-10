@@ -2,7 +2,7 @@ require('dotenv').config()
 const Moobarn = require('./moobarn')
 const pkg = require('./package.json')
 
-const launcher_timeout = process.env.LAUNCHER_TIMEOUT_MILLISECONDS
+const launcher_timeout = process.env.LAUNCHER_TIMEOUT_MILLISECONDS || 750
 
 const help_cmd = ['help', '-h', '--help']
 const version_cmd = ['version', '-v', '--version']
@@ -16,7 +16,7 @@ MOOBARN :: MOO Bridge API for React and Node
     help/-h/--help/                   print this information
     version/-v/--version              print the current package version for moobarn
     init <moo-name> from <moo-db>     initialize a new moo to ./barn/<moo-name> from ./dbs/<moo-db>/<moo-db>.db
-    start [moo-name] [port]           start [moo-name] on port [port], or all moos if nothing specified
+    start [moo-name]                  start [moo-name], or all moos if nothing specified
     stop [moo-name]                   stop [moo-name], or all moos if nothing specified
     backup [moo-name]                 back up [moo-name], or all moos if nothing specified
     list                              print a list of all moos in ./barn
@@ -107,8 +107,10 @@ if (info_cmd.includes(arg_1)) {
 if (arg_1 === 'start') {
   if (!arg_2) {
     server.controllers.get('process').startAll()
+    server.controllers.get('bridge').startAll()
   } else {
-    server.controllers.get('process').startMoo(arg_2, arg_3)
+    server.controllers.get('process').startMoo(arg_2)
+    server.controllers.get('bridge').startBridge(arg_2)
   }
   setTimeout(() => {
     process.exit()
@@ -119,8 +121,10 @@ if (arg_1 === 'start') {
 if (arg_1 === 'stop') {
   if (!arg_2) {
     server.controllers.get('process').stopAll()
+    server.controllers.get('bridge').stopAll()
   } else {
     server.controllers.get('process').stopMoo(arg_2)
+    server.controllers.get('bridge').stopBridge(arg_2)
   }
   setTimeout(() => {
     process.exit()

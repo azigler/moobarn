@@ -1,21 +1,18 @@
-const { spawn } = require('child_process')
+const child_process = require('child_process')
 const findProcess = require('find-process')
 const pidusage = require('pidusage')
 
 class BridgeController {
   async init ({
-    server,
-    bridgeTelnetPort,
-    bridgeWebsocketPort
+    server
   }) {
     this.server = server
-    this.bridgeTelnetPort = bridgeTelnetPort
-    this.bridgeWebsocketPort = bridgeWebsocketPort
+    this.procMap = new Map()
   }
 
   async start () {
     if (this.server.FLAG === 'verbose') console.log('[#] Starting telnet <-> websocket bridge...')
-    this.startAll()
+    this.updatePids()
   }
 
   stop () {
@@ -24,12 +21,14 @@ class BridgeController {
 
   async isBridgeStarted (moo) {
     const info = this.server.barn.get(moo)
-    if (info.bridgePid) {
+    if (info.bridge.pid) {
       try {
-        await pidusage(info.bridgePid)
+        await pidusage(info.bridge.pid)
         return true
       } catch {
-        this.server.setMooInfo(moo, { bridgePid: null })
+        const bridge = info.bridge
+        bridge.pid = null
+        this.server.setMooInfo(moo, { bridge })
         return false
       }
     } else {
@@ -39,67 +38,83 @@ class BridgeController {
 
   async startBridge (moo) {
     const info = this.server.barn.get(moo)
+    let result
     if (info) {
-      if (!(await this.isBridgeStarted(moo)) && !info.disabled) {
+      if (!(await this.isBridgeStarted(moo)) && !info.disabled && info.bridge.webSocketPort && info.bridge.telnetPort) {
         const msgInfo = info
-        msgInfo.bridgePid = 1
-        if (this.server.FLAG === 'verbose') { console.log(`[>] Starting ${moo} bridge... ${this.server.bridgeOnlineStatusMsg(msgInfo)}`) }
+        msgInfo.bridge.pid = 1
+        result = `[>] Starting ${moo} bridge... ${this.server.bridgeOnlineStatusMsg(msgInfo)}`
         this.spawnBridge(moo, info)
-      } else if (!info.disabled) {
-        console.log(this.server.thingAlreadyStartedError('bridge', moo))
-      } else {
-        console.log(this.server.mooDisabledError(moo))
+        console.log(result)
+        return result
+      } else if (!info.disabled && info.bridge.webSocketPort && info.bridge.telnetPort) {
+        result = this.server.thingAlreadyStartedError('bridge', moo)
+        console.log(result)
+        return result
+      } else if (info.disabled && info.bridge.webSocketPort && info.bridge.telnetPort) {
+        result = this.server.mooDisabledError(moo)
+        console.log(result)
+        return result
       }
-    } else {
-      console.log(this.server.notFoundError(moo, 'moo'))
     }
   }
 
-  startAll () {
-    if (this.server.FLAG === 'verbose') console.log('[%] Starting all bridges...')
-    this.server.barn.forEach((value, key) => {
-      if ((!value || !value.bridgePid) && !value.disabled && value.bridgeWebSocketPort) {
+  async startAll () {
+    const result = '[%] Starting all bridges...'
+    console.log(result)
+    for (const [key, value] of this.server.barn.entries()) {
+      if (!value.bridge.pid && !value.disabled && value.bridge.webSocketPort && value.bridge.telnetPort) {
         this.startBridge(key)
       }
-    })
+    }
+    this.updatePids()
+    return result
   }
 
   async stopBridge (moo) {
-    if (this.server.barn.get(moo)) {
+    let result
+    const info = this.server.barn.get(moo)
+    if (info) {
       if (await this.isBridgeStarted(moo)) {
-        console.log(`[X] Stopping ${moo} bridge...`)
+        result = `[X] Stopping ${moo} bridge...`
+        console.log(result)
         this.killBridge(moo)
+        return result
       } else {
-        console.log(this.server.thingAlreadyStoppedError('bridge', moo))
+        result = this.server.thingAlreadyStoppedError('bridge', moo)
+        console.log(result)
+        return result
       }
-    } else {
-      console.log(this.server.notFoundError(moo, 'moo'))
     }
   }
 
-  stopAll () {
-    console.log('[%] Stopping all bridges...')
-    this.server.barn.forEach((value, key) => {
-      if (value && value.pid && value.bridgeWebSocketPort) {
-        this.stopBridge(key)
+  async stopAll () {
+    const result = '[%] Stopping all bridges...'
+    console.log(result)
+    for (const [key, value] of this.server.barn.entries()) {
+      if (value.bridge.pid && value.bridge.webSocketPort && value.bridge.telnetPort) {
+        await this.stopBridge(key)
       }
-    })
+    }
+    return result
   }
 
   killBridge (moo) {
     const info = this.server.barn.get(moo)
     try {
-      process.kill(info.bridgePid)
+      process.kill(info.bridge.pid)
     } finally {
-      this.server.setMooInfo(moo, { bridgePid: null })
+      const bridge = info.bridge
+      bridge.pid = null
+      this.server.setMooInfo(moo, { bridge })
     }
   }
 
   resurrect () {
     this.server.barn.forEach(async (value, key) => {
-      if (value.bridgePid) {
+      if (value.bridge.pid) {
         try {
-          await pidusage(value.bridgePid)
+          await pidusage(value.bridge.pid)
         } catch (e) {
           console.log(`[^] Resurrecting ${key} bridge ${this.server.bridgeOnlineStatusMsg(value)}...`)
           this.spawnBridge(key, value)
@@ -109,22 +124,30 @@ class BridgeController {
   }
 
   async spawnBridge (moo, info = {}) {
-    const cmd = `node node_modules/@digibear/socket-bridge/socket-bridge.js --connect --websocket ${info.bridgeWebSocketPort} --telnet ${info.bridgeTelnetPort ? info.bridgeTelnetPort : info.mooArgs.port}`
+    const cmd = `node node_modules/@digibear/socket-bridge/socket-bridge.js --connect --websocket ${info.bridge.webSocketPort} --telnet ${info.bridge.telnetPort ? info.bridge.telnetPort : this.server.defaultMooPort}`
 
-    const child = spawn(cmd, [], { shell: true, detached: true, stdio: 'ignore' })
+    const child = child_process.spawn(cmd, [], { shell: true, detached: true, stdio: 'ignore' })
 
-    let bridgePid = child.pid
+    const bridgePid = child.pid
 
-    const arr = await this.findBridgeProcesses()
-    arr.forEach(ele => {
-      if (ele.cmd === cmd) {
-        bridgePid = ele.pid
+    const bridge = info.bridge
+    bridge.pid = bridgePid
+    this.server.setMooInfo(moo, { bridge })
+  }
+
+  updatePids () {
+    setTimeout(async () => {
+      const arr = await this.findBridgeProcesses()
+      for (const [key, value] of this.procMap.entries()) {
+        for (const ele of arr) {
+          if (ele.cmd === value) {
+            const bridge = value.bridge
+            bridge.pid = ele.pid
+            this.server.setMooInfo(key, { bridge })
+          }
+        }
       }
-    })
-
-    this.server.setMooInfo(moo, {
-      bridgePid
-    })
+    }, 400)
   }
 
   async findBridgeProcesses (format = 'array') {
@@ -154,7 +177,7 @@ class BridgeController {
 
     console.log()
     this.server.barn.forEach((value, key) => {
-      if (value.bridgeWebSocketPort) {
+      if (value.bridge.webSocketPort && value.bridge.telnetPort) {
         let padding = ''
         let goal = longest - key.length
         for (goal; goal > 0; goal--) {

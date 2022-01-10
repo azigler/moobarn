@@ -1,16 +1,16 @@
 const fs = require('fs')
 const path = require('path')
-const { spawn } = require('child_process')
+const child_process = require('child_process')
 
 class BackupController {
   async init ({
     server,
-    defaultBackupIntervalHours,
-    defaultBackupFinalScript
+    defaultBackupFinalScript,
+    defaultBackupIntervalHours
   }) {
     this.server = server
-    this.defaultBackupIntervalHours = defaultBackupIntervalHours
     this.defaultBackupFinalScript = defaultBackupFinalScript
+    this.defaultBackupIntervalHours = defaultBackupIntervalHours
   }
 
   async start () {
@@ -36,7 +36,7 @@ class BackupController {
     for (const prop in state.mooIntervals) {
       const moo = this.server.barn.get(prop)
       if (moo) {
-        if (!moo.disabled && moo.backupIntervalHours !== 0 && moo.backupIntervalHours !== null) {
+        if (!moo.disabled && moo.backup.intervalHours !== 0 && moo.backup.intervalHours !== null) {
           state.mooIntervals[prop]++
         }
       } else {
@@ -51,8 +51,8 @@ class BackupController {
 
     for (const prop in state.mooIntervals) {
       const info = this.server.barn.get(prop)
-      if (info && info.backupIntervalHours) {
-        if (state.mooIntervals[prop] >= info.backupIntervalHours) {
+      if (info && info.backup.intervalHours) {
+        if (state.mooIntervals[prop] >= info.backup.intervalHours) {
           this.backupMoo(prop)
           state.mooIntervals[prop] = 0
         }
@@ -64,6 +64,7 @@ class BackupController {
 
   backupMoo (moo) {
     const info = this.server.barn.get(moo)
+    let result
     if (info && !info.disabled) {
       this.prepareBackupFolder(moo)
 
@@ -73,29 +74,40 @@ class BackupController {
       const [hour, minute] = time.split(':')
 
       try {
-        fs.copyFileSync(path.join(__dirname, '../..', 'barn', moo, `${moo}.new.db`), path.join(__dirname, '../..', 'barn', moo, 'backup', `${year}_${month}_${day}_${hour}_${minute}_${moo}.db`))
+        fs.copyFileSync(path.join(__dirname, '../../', 'barn', moo, `${moo}.new.db`), path.join(__dirname, '../..', 'barn', moo, 'backup', `${year}_${month}_${day}_${hour}_${minute}_${moo}.db`))
 
-        this.server.setMooInfo(moo, { lastBackup: dateObj.getTime() })
+        const backup = info.backup
+        backup.last = dateObj.getTime()
 
-        console.log(`[>] Successfully backed up ${moo} moo at ${dateObj}...`)
+        this.server.setMooInfo(moo, { backup })
+
+        result = `[>] Successfully backed up ${moo} moo at ${dateObj}...`
+        console.log(result)
       } catch {
-        console.log(this.server.backupFailedError(moo))
+        result = this.server.backupFailedError(moo)
+        console.log(result)
       }
-      if (info.backupFinalScript) {
-        spawn(`sh ${info.backupFinalScript}`, [], { shell: true, detached: false, stdio: 'inherit' })
+      if (info.backup.finalScript) {
+        child_process.spawn(`sh ${info.backup.finalScript}`, [], { shell: true, detached: false, stdio: 'inherit' })
       }
+      return result
     } else if (!info) {
-      console.log(this.server.notFoundError(moo, 'moo'))
+      result = this.server.notFoundError(moo, 'moo')
+      console.log(result)
+      return result
     } else {
-      console.log(this.server.mooDisabledError(moo))
+      result = this.server.mooDisabledError(moo)
+      console.log(result)
+      return result
     }
   }
 
   backupAll (customIntervals = false) {
-    console.log('[%] Backing up moos...')
+    const result = '[%] Backing up moos...'
+    console.log(result)
     this.server.barn.forEach((value, key) => {
       if (!customIntervals) {
-        if (value && !value.disabled && value.backupIntervalHours === null) {
+        if (value && !value.disabled && value.backup.intervalHours === null) {
           this.backupMoo(key)
         }
       } else {
@@ -104,11 +116,12 @@ class BackupController {
         }
       }
     })
+    return result
   }
 
   prepareBackupFolder (moo) {
-    if (!fs.existsSync(path.join(__dirname, '../..', 'barn', moo, 'backup'))) {
-      fs.mkdirSync(path.join(__dirname, '../..', 'barn', moo, 'backup'), { recursive: true }, (e) => {
+    if (!fs.existsSync(path.join(__dirname, '../../', 'barn', moo, 'backup'))) {
+      fs.mkdirSync(path.join(__dirname, '../../', 'barn', moo, 'backup'), { recursive: true }, (e) => {
         throw e
       })
     }
