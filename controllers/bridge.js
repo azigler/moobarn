@@ -80,8 +80,12 @@ class BridgeController {
         console.log(result)
         this.killBridge(moo)
         return result
-      } else {
+      } else if (!info.disabled && info.bridge.webSocketPort && info.bridge.telnetPort) {
         result = this.server.thingAlreadyStoppedError('bridge', moo)
+        console.log(result)
+        return result
+      } else if (info.disabled && info.bridge.webSocketPort && info.bridge.telnetPort) {
+        result = this.server.mooDisabledError(moo)
         console.log(result)
         return result
       }
