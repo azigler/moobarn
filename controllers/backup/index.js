@@ -3,7 +3,7 @@ const path = require('path')
 const child_process = require('child_process')
 
 class BackupController {
-  async init ({
+  init ({
     server,
     defaultBackupFinalScript,
     defaultBackupIntervalHours
@@ -13,7 +13,7 @@ class BackupController {
     this.defaultBackupIntervalHours = defaultBackupIntervalHours
   }
 
-  async start () {
+  start () {
     if (this.server.FLAG === 'verbose') console.log('[#] Starting backup controller...')
     this.loadState()
   }

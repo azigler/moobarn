@@ -3,15 +3,18 @@ const findProcess = require('find-process')
 const pidusage = require('pidusage')
 
 class BridgeController {
-  async init ({
+  init ({
     server
   }) {
     this.server = server
     this.procMap = new Map()
   }
 
-  async start () {
+  start () {
     if (this.server.FLAG === 'verbose') console.log('[#] Starting telnet <-> websocket bridge...')
+    for (const [key, value] of this.server.barn.entries()) {
+      this.determineBridgeCmd(key, value)
+    }
     this.updatePids()
   }
 
@@ -127,8 +130,22 @@ class BridgeController {
     })
   }
 
+  determineBridgeCmd (moo, info = {}) {
+    let cmd
+    if (!info.disabled && info.bridge.webSocketPort && info.bridge.telnetPort) {
+      cmd = `node node_modules/@digibear/socket-bridge/socket-bridge.js --connect --websocket ${info.bridge.webSocketPort} --telnet ${info.bridge.telnetPort ? info.bridge.telnetPort : this.server.defaultMooPort}`
+    } else {
+      cmd = null
+    }
+
+    this.procMap.set(moo, cmd)
+
+    return cmd
+  }
+
   async spawnBridge (moo, info = {}) {
-    const cmd = `node node_modules/@digibear/socket-bridge/socket-bridge.js --connect --websocket ${info.bridge.webSocketPort} --telnet ${info.bridge.telnetPort ? info.bridge.telnetPort : this.server.defaultMooPort}`
+    const cmd = this.determineBridgeCmd(moo, info)
+    this.procMap.set(moo, cmd)
 
     const child = child_process.spawn(cmd, [], { shell: true, detached: true, stdio: 'ignore' })
 
@@ -141,11 +158,11 @@ class BridgeController {
 
   updatePids () {
     setTimeout(async () => {
-      const arr = await this.findBridgeProcesses()
+      const pidResults = await this.findBridgeProcesses()
       for (const [key, value] of this.procMap.entries()) {
-        for (const ele of arr) {
+        for (const ele of pidResults) {
           if (ele.cmd === value) {
-            const bridge = value.bridge
+            const bridge = this.server.barn.get(key).bridge
             bridge.pid = ele.pid
             this.server.setMooInfo(key, { bridge })
           }

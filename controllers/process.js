@@ -5,7 +5,7 @@ const findProcess = require('find-process')
 const pidusage = require('pidusage')
 
 class ProcessController {
-  async init ({
+  init ({
     server
   }) {
     this.server = server
@@ -14,6 +14,9 @@ class ProcessController {
 
   start () {
     if (this.server.FLAG === 'verbose') console.log('[#] Starting moo process controller...')
+    for (const [key, value] of this.server.barn.entries()) {
+      this.determineMooCmd(key, value)
+    }
     this.updatePids()
   }
 
@@ -128,36 +131,45 @@ class ProcessController {
     })
   }
 
-  spawnMoo (moo, info = {}) {
-    const [mooArgs, portArgs] = this.prepareMooArgs(info)
-    let startDb
+  determineMooCmd (moo, info = {}) {
+    if (!info.disabled) {
+      const [mooArgs, portArgs] = this.prepareMooArgs(info)
+      let startDb
+      const barnPath = path.join(__dirname, '../', 'barn')
+      const mooPath = path.join(__dirname, '../', 'toaststunt', 'build', 'moo')
 
-    try {
-      startDb = this.shuffleMooFiles(moo, 'db')
-    } catch (e) {
-      return console.log(e)
+      try {
+        startDb = this.shuffleMooFiles(moo, 'db')
+      } catch (e) {
+        return console.log(e)
+      }
+
+      const cmd = `${mooPath} ${mooArgs ? mooArgs + ' ' : ''}${barnPath}/${moo}/${startDb} ${barnPath}/${moo}/${moo}.new.db ${portArgs}`.trim()
+
+      this.procMap.set(moo, cmd)
+
+      return cmd
+    } else {
+      return null
     }
+  }
 
+  spawnMoo (moo, info = {}) {
     this.shuffleMooFiles(moo, 'log')
 
     const logStream = fs.createWriteStream(path.join(__dirname, '../', 'barn', moo, `${moo}.new.log`))
     logStream.on('open', () => {
-      const barnPath = path.join(__dirname, '../', 'barn')
-      const mooPath = path.join(__dirname, '../', 'toaststunt', 'build', 'moo')
-
       let stdio = [logStream, logStream, logStream]
       if (info.mooArgs.scriptFile) {
         console.log(`NOTE: Unable to write to ${moo}.new.log due to -f argument`)
         stdio = ['inherit', 'inherit', 'inherit']
       }
 
-      const cmd = `${mooPath} ${mooArgs ? mooArgs + ' ' : ''}${barnPath}/${moo}/${startDb} ${barnPath}/${moo}/${moo}.new.db ${portArgs}`
+      const cmd = this.determineMooCmd(moo, info)
 
       const child = child_process.spawn(cmd, [], { shell: true, detached: true, stdio })
 
       const pid = child.pid
-
-      this.procMap.set(moo, cmd)
 
       this.server.setMooInfo(moo, {
         pid,
@@ -168,9 +180,9 @@ class ProcessController {
 
   updatePids () {
     setTimeout(async () => {
-      const arr = await this.findMooProcesses()
+      const pidResults = await this.findMooProcesses()
       for (const [key, value] of this.procMap.entries()) {
-        for (const ele of arr) {
+        for (const ele of pidResults) {
           if (ele.cmd === value) {
             this.server.setMooInfo(key, {
               pid: ele.pid

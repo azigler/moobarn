@@ -145,6 +145,8 @@ class Moobarn extends require('events') {
       } else {
         return false
       }
+    }).map(item => {
+      return item.split('.moo')[0]
     })
   }
 
@@ -203,8 +205,8 @@ class Moobarn extends require('events') {
         console.log(`     Bridge: ${this.bridgeOnlineStatusMsg(result)}`)
         console.log(` Bridge PID: ${!result.bridge.pid ? '(none)' : result.bridge.pid}`)
       }
-      console.log(` Last start: ${!result.lastStart ? '(never)' : new Date(result.lastStart)}`)
-      console.log(`Last backup: ${!result.backup.last ? '(never)' : new Date(result.backup.last)}`)
+      console.log(` Last Start: ${!result.lastStart ? '(never)' : new Date(result.lastStart)}`)
+      console.log(`Last Backup: ${!result.backup.last ? '(never)' : new Date(result.backup.last)}`)
     } else {
       return console.log(this.notFoundError(moo, 'moo'))
     }
